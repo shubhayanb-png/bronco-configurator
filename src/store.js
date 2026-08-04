@@ -61,6 +61,11 @@ export const useConfig = create((set, get) => ({
   showConfig: true,
   toggleConfig: () => set((s) => ({ showConfig: !s.showConfig })),
 
+  // True once the loading screen finishes. The camera intro waits for this,
+  // so the cinematic glide plays as the loading screen lifts (not behind it).
+  ready: false,
+  setReady: (v) => set({ ready: v }),
+
   getTotal: () => {
     const s = get()
     const paint = broncoColors.find((c) => c.hex === s.paintColor)

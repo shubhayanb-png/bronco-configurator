@@ -23,7 +23,7 @@ export default function Footer() {
       justifyContent: 'space-between',
       padding: '0 28px',
       height: '72px',
-      zIndex: 40,
+      zIndex: 10000,
       fontFamily: 'system-ui, sans-serif',
       pointerEvents: 'none',
     }}>

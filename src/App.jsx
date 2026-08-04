@@ -6,6 +6,7 @@ import { useConfig, cameraViews } from './store'
 import SwatchPanel from './SwatchPanel'
 import NavBar from './NavBar'
 import Footer from './Footer'
+import LoadingScreen from './LoadingScreen'
 import './App.css'
 
 const HERO = { pos: [-4.25, 1.69, 2.91], target: [-0.02, 0.81, -0.06] }
@@ -15,6 +16,7 @@ const CAMERA_GLIDE = 0.02
 function CameraRig({ controlsRef }) {
   const { camera } = useThree()
   const openMenu = useConfig((s) => s.openMenu)
+  const ready = useConfig((s) => s.ready)
 
   const introDone = useRef(false)
   const introStart = useRef(null)
@@ -48,6 +50,10 @@ function CameraRig({ controlsRef }) {
   }, [controlsRef])
 
   useFrame((state) => {
+    // Hold the camera at its zoomed-in start pose until the loading screen says it's done.
+    // This makes the intro glide play ON the reveal, instead of silently behind the loader.
+    if (!ready) return
+
     const controls = controlsRef.current
 
     if (!introDone.current) {
@@ -237,6 +243,7 @@ export default function App() {
       <NavBar />
       <SwatchPanel />
       <Footer />
+      <LoadingScreen />
     </div>
   )
 }

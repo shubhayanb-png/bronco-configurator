@@ -18,7 +18,7 @@ export default function NavBar() {
       background: 'rgba(245, 243, 238, 0.9)',
       backdropFilter: 'blur(10px)',
       borderBottom: '1px solid rgba(0,0,0,0.06)',
-      zIndex: 40,
+      zIndex: 10000,
       fontFamily: 'system-ui, sans-serif',
       gap: '24px',
     }}>
