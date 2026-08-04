@@ -22,6 +22,17 @@ export default function NavBar() {
       fontFamily: 'system-ui, sans-serif',
       gap: '24px',
     }}>
+      {/* Hover styles (inline styles can't do :hover, so we scope a tiny stylesheet here) */}
+      <style>{`
+        .bronco-tab {
+          transition: transform 0.18s ease, color 0.2s ease;
+          will-change: transform;
+        }
+        .bronco-tab:hover {
+          transform: translateY(-2px);
+        }
+      `}</style>
+
       {/* Logo image (transparent PNG) */}
       <img
         src="/ui/bronco-logo.png"
@@ -47,6 +58,7 @@ export default function NavBar() {
           return (
             <div
               key={tab.id}
+              className="bronco-tab"
               onClick={() => setActiveTab(tab.id)}
               style={{
                 position: 'relative',
@@ -57,7 +69,6 @@ export default function NavBar() {
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 paddingBottom: '4px',
-                transition: 'color 0.2s ease',
               }}
             >
               {tab.label}
