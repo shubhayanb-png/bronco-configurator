@@ -22,6 +22,12 @@ export const wheelFinishes = [
   { name: 'Bronze',      hex: '#8a6d3b', metalness: 0.95, roughness: 0.3,  price: 65000 },
 ]
 
+// Accessories that can be toggled on/off independently (each is its own node in the GLB)
+export const accessoryOptions = [
+  { id: 'roofRack', name: 'ROOF RACK' },
+  { id: 'winch',    name: 'WINCH' },
+]
+
 // Top-nav tabs (placeholders for now; 'paint' and 'wheel' are the live ones)
 export const navTabs = [
   { id: 'paint',      label: 'PAINT' },
@@ -50,6 +56,16 @@ export const useConfig = create((set, get) => ({
   wheelFinish: wheelFinishes[0],
   setWheelFinish: (finish) => set({ wheelFinish: finish }),
 
+  // DRL daytime running lights on/off
+  drl: false,
+  setDrl: (v) => set({ drl: v }),
+  toggleDrl: () => set((s) => ({ drl: !s.drl })),
+
+  // Accessory visibility (default: shown for the hero look)
+  accessories: { roofRack: true, winch: true },
+  toggleAccessory: (id) =>
+    set((s) => ({ accessories: { ...s.accessories, [id]: !s.accessories[id] } })),
+
   openMenu: null,
   setOpenMenu: (menu) => set({ openMenu: menu }),
 
@@ -61,8 +77,7 @@ export const useConfig = create((set, get) => ({
   showConfig: true,
   toggleConfig: () => set((s) => ({ showConfig: !s.showConfig })),
 
-  // True once the loading screen finishes. The camera intro waits for this,
-  // so the cinematic glide plays as the loading screen lifts (not behind it).
+  // True once the loading screen finishes. The camera intro waits for this.
   ready: false,
   setReady: (v) => set({ ready: v }),
 

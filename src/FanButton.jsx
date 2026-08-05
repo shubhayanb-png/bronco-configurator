@@ -1,8 +1,15 @@
 import { useState } from 'react'
 
-function Swatch({ name, hex, active, x, y, anchorRight, open, delay, onSelect }) {
+function Swatch({ name, hex, active, x, y, anchorRight, open, delay, onSelect, toggle = false, on = false }) {
   const [isHover, setIsHover] = useState(false)
-  const size = isHover ? 56 : active ? 48 : 36
+  const emphasized = isHover || (toggle ? on : active)
+  const size = isHover ? 56 : emphasized ? 48 : 36
+
+  // In toggle mode the circle shows an on/off state instead of a paint colour.
+  const circleBg = toggle ? (on ? hex : '#333333') : hex
+  const circleBorder = toggle
+    ? (on ? '3px solid #fff' : '2px solid rgba(255,255,255,0.3)')
+    : (active ? '3px solid #fff' : '2px solid rgba(255,255,255,0.7)')
 
   return (
     <div
@@ -26,11 +33,11 @@ function Swatch({ name, hex, active, x, y, anchorRight, open, delay, onSelect })
       }}
     >
       <span style={{
-        fontSize: isHover || active ? '15px' : '13px',
+        fontSize: emphasized ? '15px' : '13px',
         fontFamily: 'system-ui, sans-serif',
         color: '#2a2a2a',
-        opacity: isHover || active ? 1 : 0.55,
-        fontWeight: isHover || active ? 600 : 400,
+        opacity: emphasized ? 1 : 0.55,
+        fontWeight: emphasized ? 600 : 400,
         whiteSpace: 'nowrap',
         transition: 'all 0.25s ease',
       }}>
@@ -40,8 +47,8 @@ function Swatch({ name, hex, active, x, y, anchorRight, open, delay, onSelect })
         width: `${size}px`,
         height: `${size}px`,
         borderRadius: '50%',
-        background: hex,
-        border: active ? '3px solid #fff' : '2px solid rgba(255,255,255,0.7)',
+        background: circleBg,
+        border: circleBorder,
         boxShadow: isHover ? '0 6px 20px rgba(0,0,0,0.35)' : '0 2px 8px rgba(0,0,0,0.18)',
         transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
         flexShrink: 0,
@@ -61,11 +68,15 @@ export default function FanButton({
   open,
   setOpen,
   dimmed,
+  toggle = false,   // when true: each option is an independent on/off toggle
+  isOn,             // (opt) => boolean, used in toggle mode
 }) {
   const count = options.length
   const arcRadius = 190
   const arcSpread = 150
   const anchorRight = 70
+
+  const anyOn = toggle && typeof isOn === 'function' && options.some((o) => isOn(o))
 
   return (
     <div style={{
@@ -85,12 +96,16 @@ export default function FanButton({
         const angle = (-arcSpread / 2 + t * arcSpread) * (Math.PI / 180)
         const x = open ? -Math.cos(angle) * arcRadius : 0
         const y = open ? Math.sin(angle) * arcRadius : 0
+        const optOn = toggle && typeof isOn === 'function' ? isOn(opt) : false
+        const optActive = toggle ? optOn : getName(activeValue) === getName(opt)
         return (
           <Swatch
             key={getName(opt)}
             name={getName(opt)}
             hex={getHex(opt)}
-            active={getName(activeValue) === getName(opt)}
+            active={optActive}
+            toggle={toggle}
+            on={optOn}
             x={x}
             y={y + verticalOffset}
             anchorRight={anchorRight}
@@ -130,7 +145,7 @@ export default function FanButton({
           width: '22px',
           height: '22px',
           borderRadius: '50%',
-          background: getHex(activeValue),
+          background: toggle ? (anyOn ? '#d9622a' : '#4a4a4a') : getHex(activeValue),
           border: '2px solid rgba(255,255,255,0.8)',
           transition: 'background 0.3s ease',
         }} />

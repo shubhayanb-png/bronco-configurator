@@ -13,6 +13,22 @@ const HERO = { pos: [-4.25, 1.69, 2.91], target: [-0.02, 0.81, -0.06] }
 const INTRO_DURATION = 2.0
 const CAMERA_GLIDE = 0.02
 
+// ---- DRL glow tuning ----
+// Bright emissive lens core (toneMapped=false) + additive "halo" shells hugging the lens.
+// This is pure geometry -- it never touches the rest of the scene (no post-processing).
+const DRL_COLOR = '#dfeaff'          // cool daytime-running-light white
+const DRL_INTENSITY = 2.0            // brightness of the lit lens core
+const DRL_ON_TRANSMISSION = 0.15     // lens goes near-solid when lit (base is clear glass)
+// halo shells: [outward offset in metres, peak opacity]. More layers = softer falloff.
+const DRL_HALO_LAYERS = [
+  [0.006, 0.35],
+  [0.015, 0.20],
+  [0.028, 0.10],
+]
+
+// ---- one-line switch: pillars follow body paint (true) or fixed semi-gloss black (false) ----
+const PILLAR_FOLLOWS_BODY = true
+
 function CameraRig({ controlsRef }) {
   const { camera } = useThree()
   const openMenu = useConfig((s) => s.openMenu)
@@ -50,8 +66,6 @@ function CameraRig({ controlsRef }) {
   }, [controlsRef])
 
   useFrame((state) => {
-    // Hold the camera at its zoomed-in start pose until the loading screen says it's done.
-    // This makes the intro glide play ON the reveal, instead of silently behind the loader.
     if (!ready) return
 
     const controls = controlsRef.current
@@ -93,30 +107,69 @@ function CameraRig({ controlsRef }) {
   return null
 }
 
+// Build an outward-inflated copy of a geometry (vertices pushed along their normals)
+function inflatedGeometry(geom, offset) {
+  const g = geom.clone()
+  const pos = g.attributes.position
+  const nor = g.attributes.normal
+  if (!pos || !nor) return null
+  for (let i = 0; i < pos.count; i++) {
+    pos.setXYZ(
+      i,
+      pos.getX(i) + nor.getX(i) * offset,
+      pos.getY(i) + nor.getY(i) * offset,
+      pos.getZ(i) + nor.getZ(i) * offset,
+    )
+  }
+  pos.needsUpdate = true
+  g.computeBoundingSphere()
+  return g
+}
+
 function Bronco() {
-  const { scene } = useGLTF('/Ford_Bronco_config.glb')
+  const { scene } = useGLTF('/bronco_v2.glb')
   const ref = useRef()
   const paintColor = useConfig((s) => s.paintColor)
   const wheelFinish = useConfig((s) => s.wheelFinish)
+  const drl = useConfig((s) => s.drl)
+  const accessories = useConfig((s) => s.accessories)
 
   const paintMats = useRef([])
   const wheelMats = useRef([])
+  const drlMats = useRef([])          // [{ mat, baseTrans }]
+  const haloMats = useRef([])         // additive glow shell materials (with .userData.maxOpacity)
+  const roofRackObjs = useRef([])
+  const winchObjs = useRef([])
+
   const targetColor = useRef(new THREE.Color(paintColor))
   const wheelTargetColor = useRef(new THREE.Color(wheelFinish.hex))
   const wheelTargetMetal = useRef(wheelFinish.metalness)
   const wheelTargetRough = useRef(wheelFinish.roughness)
+  const drlRef = useRef(drl)
+  drlRef.current = drl
 
   useLayoutEffect(() => {
     const paints = []
     const wheels = []
+    const drls = []
+    const drlMeshes = []
+    const roofRack = []
+    const winch = []
+
     scene.traverse((obj) => {
+      const on = obj.name || ''
+      if (on.includes('Roof_Rack')) roofRack.push(obj)
+      if (on.includes('Wench') || on.includes('Warn') || on.includes('Wanr')) winch.push(obj)
+
       if (obj.isMesh && obj.material) {
         obj.castShadow = true
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         mats.forEach((m) => {
           m.side = THREE.DoubleSide
-          const n = (m.name || '').toLowerCase()
-          if (n.includes('carpaint')) {
+          const n = m.name || ''
+
+          // --- BODY PAINT: main body always; pillars follow body unless switched off ---
+          if (n === 'CarPaint' || (PILLAR_FOLLOWS_BODY && n === 'CarPaint_Pillar')) {
             m.metalness = 0.6
             m.roughness = 0.35
             m.clearcoat = 1.0
@@ -124,13 +177,79 @@ function Bronco() {
             m.envMapIntensity = 1.5
             m.needsUpdate = true
             paints.push(m)
+          } else if (!PILLAR_FOLLOWS_BODY && n === 'CarPaint_Pillar') {
+            m.color.set('#141414')
+            m.metalness = 0.1
+            m.roughness = 0.45
+            m.clearcoat = 0.35
+            m.clearcoatRoughness = 0.2
+            m.needsUpdate = true
           }
-          if (n.includes('alloy')) wheels.push(m)
+
+          // --- WHEEL FINISH: only the alloy face ---
+          if (n === 'Alloy') wheels.push(m)
+
+          // --- DISC BRAKE: brushed-metal grain (specular.jpg) was exported into the
+          //     normal slot; route it to roughness and make the rotor metallic steel ---
+          if (n === 'Disc Brake') {
+            if (m.normalMap) { m.roughnessMap = m.normalMap; m.normalMap = null }
+            m.metalness = 1.0
+            m.roughness = 0.55
+            m.color.set('#8f9296')
+            m.needsUpdate = true
+          }
+
+          // --- TYRE: reveal the Michelin sidewall (baseColorFactor was crushed to ~0.03,
+          //     and the colour JPG was mis-assigned as a normal map) ---
+          if (n === 'Tyre') {
+            m.color.set('#ffffff')
+            if (m.normalMap) m.normalMap = null
+            m.needsUpdate = true
+          }
+
+          // --- DRL: emissive lens core (toneMapped=false = bright when lit) ---
+          if (n === 'DRL_Glass') {
+            m.emissive = new THREE.Color(DRL_COLOR)
+            m.emissiveIntensity = 0
+            m.toneMapped = false
+            m.needsUpdate = true
+            drls.push({ mat: m, baseTrans: m.transmission ?? 0 })
+            drlMeshes.push(obj)
+          }
         })
       }
     })
+
+    // --- build additive glow shells around each DRL lens (pure geometry, self-contained) ---
+    const halos = []
+    drlMeshes.forEach((dm) => {
+      DRL_HALO_LAYERS.forEach(([offset, maxOpacity]) => {
+        const g = inflatedGeometry(dm.geometry, offset)
+        if (!g) return
+        const mat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(DRL_COLOR),
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+          side: THREE.FrontSide,
+        })
+        mat.userData.maxOpacity = maxOpacity
+        const shell = new THREE.Mesh(g, mat)
+        shell.renderOrder = 999
+        shell.castShadow = false
+        dm.add(shell)          // child of the lens -> inherits its exact transform
+        halos.push(mat)
+      })
+    })
+
     paintMats.current = paints
     wheelMats.current = wheels
+    drlMats.current = drls
+    haloMats.current = halos
+    roofRackObjs.current = roofRack
+    winchObjs.current = winch
 
     const box = new THREE.Box3().setFromObject(scene)
     const center = box.getCenter(new THREE.Vector3())
@@ -149,6 +268,11 @@ function Bronco() {
     wheelTargetRough.current = wheelFinish.roughness
   }, [wheelFinish])
 
+  useLayoutEffect(() => {
+    roofRackObjs.current.forEach((o) => { o.visible = accessories.roofRack })
+    winchObjs.current.forEach((o) => { o.visible = accessories.winch })
+  }, [accessories])
+
   useFrame(() => {
     paintMats.current.forEach((m) => {
       m.color.lerp(targetColor.current, 0.08)
@@ -157,6 +281,21 @@ function Bronco() {
       m.color.lerp(wheelTargetColor.current, 0.08)
       m.metalness += (wheelTargetMetal.current - m.metalness) * 0.08
       m.roughness += (wheelTargetRough.current - m.roughness) * 0.08
+    })
+    const on = drlRef.current
+    // lens core
+    const targetI = on ? DRL_INTENSITY : 0
+    drlMats.current.forEach(({ mat, baseTrans }) => {
+      mat.emissiveIntensity += (targetI - mat.emissiveIntensity) * 0.15
+      if (mat.transmission !== undefined) {
+        const targetT = on ? DRL_ON_TRANSMISSION : baseTrans
+        mat.transmission += (targetT - mat.transmission) * 0.15
+      }
+    })
+    // halo shells
+    haloMats.current.forEach((mat) => {
+      const target = on ? mat.userData.maxOpacity : 0
+      mat.opacity += (target - mat.opacity) * 0.15
     })
   })
 
